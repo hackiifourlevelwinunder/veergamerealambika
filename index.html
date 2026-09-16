@@ -2207,6 +2207,7 @@ let predictedPeriod = null;
 let currentTargetPeriod = null;
 let lastRenderedHash = null;
 let lastFetchedList = [];
+let latestApiRow = null;
 let currentAuthDetails = null;
 
 function toggleAudio() {
@@ -2714,8 +2715,10 @@ function applyUnlockedState(revealNow = false) {
 
     if (lastFetchedList && lastFetchedList.length > 0) {
         renderTable(lastFetchedList, true);
+        if (isUnlocked) renderLatestApiResult(lastFetchedList[0]);
     }
     hfpUpdatePrediction(revealNow);
+    if (isUnlocked && latestApiRow) renderLatestApiResult(latestApiRow);
 }
 
 function applyLockedState() {
@@ -2953,6 +2956,7 @@ async function submitModalUid() {
             setTimeout(() => {
                 closeUnlockModal();
                 applyUnlockedState();
+                if (latestApiRow) renderLatestApiResult(latestApiRow);
                 showToast(`⚡ VEERGAME loaded! Tap logo to open/close hack panel.`);
             }, 1800);
             return;
@@ -3180,12 +3184,14 @@ async function syncData(force = false) {
                     // in both Upcoming and History.
                     const normalized = list.filter(Boolean);
                     lastFetchedList = normalized;
+                    latestApiRow = normalized[0] || null;
 
                     // SOURCE OF TRUTH: newest API row is Upcoming.
                     // When a new API row arrives, the previous Upcoming row
                     // becomes History automatically.
                     updatePeriodTarget(normalized[0]);
                     renderTable(normalized, true);
+                    if (isUnlocked) renderLatestApiResult(normalized[0]);
                     updateRatioVisualizer(normalized);
                     return;
                 }
@@ -3199,6 +3205,65 @@ async function syncData(force = false) {
         const rowsContainer = document.getElementById('historyRowsList');
         if (rowsContainer) rowsContainer.innerHTML = '<div class="text-center text-xs font-mono text-gray-500 py-8">LIVE RESULT STREAM UNAVAILABLE</div>';
     }
+}
+
+function renderLatestApiResult(row) {
+    if (!row || !isUnlocked) return;
+
+    const rawNum = row.number ?? row.Number ?? row.openNumber ?? row.result ?? row.winNumber;
+    const num = Number.parseInt(rawNum, 10);
+    if (!Number.isFinite(num) || num < 0 || num > 9) return;
+
+    const size = num >= 5 ? 'BIG' : 'SMALL';
+    const color = [1,3,7,9].includes(num) ? 'green' : ([2,4,6,8].includes(num) ? 'red' : (num === 0 ? 'violet' : 'green'));
+    const period = (row.issueNumber || row.IssueNumber || '').toString().replace(/^#/, '').trim();
+
+    // The Upcoming card is the exact latest API result for a verified UID.
+    const resSize = document.getElementById('resSize');
+    const resNumContainer = document.getElementById('resNumContainer');
+    const resColorBadge = document.getElementById('resColorBadge');
+    const resConfidence = document.getElementById('resConfidence');
+    const btnText = document.getElementById('nextRoundBtnText');
+    const mainSizeSvg = document.getElementById('mainSizeYantraSvg');
+    const mainNumSvg = document.getElementById('mainNumYantraSvg');
+    const mainSizeGlow = document.getElementById('mainSizeGlow');
+    const mainNumGlow = document.getElementById('mainNumGlow');
+
+    if (resSize) {
+        resSize.innerText = size;
+        resSize.className = `relative z-10 text-3xl sm:text-4xl font-orbitron font-black ${size === 'BIG' ? 'text-size-big' : 'text-size-small'} select-none`;
+    }
+    if (resConfidence) {
+        resConfidence.innerText = 'LATEST API RESULT';
+        resConfidence.className = 'text-[10.5px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-cyber-neonCyan/10 border border-cyber-neonCyan/30 text-cyber-neonCyan';
+    }
+    if (resNumContainer) resNumContainer.innerHTML = renderCyberBall(num, 68);
+    if (mainSizeGlow) mainSizeGlow.className = `yantra-chakra-particle-glow ${size === 'BIG' ? 'chakra-aura-big' : 'chakra-aura-small'}`;
+    if (mainSizeSvg) mainSizeSvg.className = `yantra-chakra-svg transition-all duration-300 ${size === 'BIG' ? 'chakra-svg-big' : 'chakra-svg-small'}`;
+    if (mainNumGlow) mainNumGlow.className = `yantra-chakra-particle-glow ${color === 'red' ? 'chakra-aura-small' : 'chakra-aura-big'}`;
+    if (mainNumSvg) mainNumSvg.className = `yantra-chakra-svg transition-all duration-300 ${color === 'red' ? 'chakra-svg-small' : 'chakra-svg-big'}`;
+    if (resColorBadge) {
+        const cls = color === 'red'
+            ? 'w-3.5 h-3.5 rounded-full bg-cyber-neonPink shadow-[0_0_10px_#ff007f]'
+            : 'w-3.5 h-3.5 rounded-full bg-cyber-neonGreen shadow-[0_0_10px_#00ff88]';
+        resColorBadge.className = cls;
+    }
+    if (btnText) btnText.innerText = period ? `LATEST RESULT #${period.slice(-5)}` : 'LATEST API RESULT';
+
+    // Keep the compact floating panel synchronized with the same API row.
+    const hfpSize = document.getElementById('hfpResSize');
+    const hfpNum = document.getElementById('hfpResNumContainer');
+    const hfpColor = document.getElementById('hfpResColorBadge');
+    const hfpConf = document.getElementById('hfpResConfidence');
+    if (hfpSize) {
+        hfpSize.innerText = size;
+        hfpSize.className = `relative z-10 text-2xl font-orbitron font-black ${size === 'BIG' ? 'text-size-big' : 'text-size-small'} select-none`;
+    }
+    if (hfpNum) hfpNum.innerHTML = renderCyberBall(num, 56);
+    if (hfpConf) hfpConf.innerText = 'LATEST API';
+    if (hfpColor) hfpColor.className = color === 'red'
+        ? 'w-2.5 h-2.5 rounded-full bg-cyber-neonPink shadow-[0_0_8px_#ff007f]'
+        : 'w-2.5 h-2.5 rounded-full bg-cyber-neonGreen shadow-[0_0_8px_#00ff88]';
 }
 
 function updateRatioVisualizer(list) {
@@ -3476,7 +3541,8 @@ function updatePeriodTarget(latestRow) {
         predictedPeriod = null;
         if (isUnlocked) {
             applyUnlockedState(false);
-            showToast(`⚡ Upcoming #${upcomingId.slice(-5)} loaded.`);
+            if (latestApiRow) renderLatestApiResult(latestApiRow);
+            showToast(`⚡ Latest API #${upcomingId.slice(-5)} loaded.`);
         }
     }
 }
@@ -3784,14 +3850,17 @@ window.addEventListener('DOMContentLoaded', () => {
     // Boot splash is handled by the Render-safe inline fallback in index.html.
     if (window.__startRenderBoot) window.__startRenderBoot();
 
-    checkExistingAuth();
+    checkExistingAuth().then(() => {
+        if (isUnlocked) syncData(true);
+    });
     syncBroadcastAndSettings();
     setInterval(updateTimer, 1000);
     updateTimer();
-    syncData(true);
 
-    // Continuous Live Draw & History Sync every 4 seconds
-    setInterval(() => syncData(), 4000);
+    // Continuous Live Draw & History Sync every 4 seconds, only after UID verification.
+    setInterval(() => {
+        if (isUnlocked) syncData();
+    }, 4000);
 
     // Periodic Server Auth & Broadcast Check
     setInterval(checkExistingAuth, 15000);
