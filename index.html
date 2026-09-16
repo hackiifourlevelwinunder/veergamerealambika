@@ -2942,6 +2942,11 @@ async function submitModalUid() {
             localStorage.setItem('wingo_verified_uid', uid);
             isUnlocked = true;
             currentAuthDetails = apiRes;
+
+            // Immediately sync the newest API issue after UID verification.
+            // API row 0 is Upcoming; older rows are History.
+            await syncData(true);
+
             playVoiceSound('hack_activated');
             showToast(`✅ UID #${uid} Verified! Game loading...`);
 
@@ -3124,6 +3129,7 @@ async function submitModalKey() {
             localStorage.setItem('wingo_vip_license_key', val);
             isUnlocked = true;
             currentAuthDetails = apiRes;
+            await syncData(true);
             playUiSound('unlock');
             showToast("✅ VIP Key Verified & Bound to Device!");
             applyUnlockedState();
@@ -3174,8 +3180,12 @@ async function syncData(force = false) {
                     // in both Upcoming and History.
                     const normalized = list.filter(Boolean);
                     lastFetchedList = normalized;
+
+                    // SOURCE OF TRUTH: newest API row is Upcoming.
+                    // When a new API row arrives, the previous Upcoming row
+                    // becomes History automatically.
                     updatePeriodTarget(normalized[0]);
-                    renderTable(normalized, force);
+                    renderTable(normalized, true);
                     updateRatioVisualizer(normalized);
                     return;
                 }
@@ -3259,10 +3269,12 @@ function renderTable(list, force = false) {
     // History starts from row #2: when a newer issue appears, the previous current
     // issue becomes a history entry automatically. No duplicate current row.
     // Never fabricate a result; only render rows actually returned by the API.
-    list.slice(1, 11).forEach((row, index) => {
+    const seenPeriods = new Set();
+    list.slice(1, 31).forEach((row, index) => {
         const period = (row.issueNumber || row.IssueNumber || '').toString().replace(/^#/, '');
         const num = Number.parseInt(row.number ?? row.Number ?? row.openNumber ?? 0, 10);
-        if (!period) return;
+        if (!period || seenPeriods.has(period)) return;
+        seenPeriods.add(period);
 
         let isWin;
         if (!isUnlocked) {
